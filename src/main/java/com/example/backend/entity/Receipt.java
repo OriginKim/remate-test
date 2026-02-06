@@ -50,7 +50,7 @@ public class Receipt {
   private String tradeDate;
   private int totalAmount;
 
-  // 핵심 수정 부분: 매우 긴 JSON 데이터를 저장하기 위해 타입을 지정합니다.
+  // 핵심 수정 부분: 매우 긴 JSON 데이터를 저장하기 위해 타입을 지정
   @Lob
   @Column(columnDefinition = "LONGTEXT")
   private String rawText;

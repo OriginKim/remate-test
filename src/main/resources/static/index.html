@@ -44,10 +44,10 @@
         document.getElementById('after-login').classList.remove('hidden');
         document.getElementById('token-box').innerText = "내 토큰: " + token;
 
-        // 주소창에서 ?token=... 부분을 싹 지워서 깔끔하게 만듦
+
         window.history.replaceState({}, document.title, "/");
     } else if (localStorage.getItem('accessToken')) {
-        // 이미 로그인 정보가 로컬스토리지에 있는 경우
+
         document.getElementById('before-login').classList.add('hidden');
         document.getElementById('after-login').classList.remove('hidden');
         document.getElementById('token-box').innerText = "기존 토큰 유지 중";

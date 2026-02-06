@@ -62,7 +62,7 @@
             const result = await response.json();
             status.innerText = "✅ 분석 성공!";
 
-            // 결과 UI 업데이트
+
             resultBox.innerHTML = `
                     <strong>🏢 상호명:</strong> ${result.storeName}<br>
                     <strong>📅 날짜:</strong> ${result.tradeDate || '인식 불가'}<br>
