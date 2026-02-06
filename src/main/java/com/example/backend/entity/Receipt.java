@@ -27,6 +27,9 @@ public class Receipt {
 
   private int totalAmount;
 
+  @Column(unique = true)
+  private String idempotencyKey;
+
   @Lob
   @Column(columnDefinition = "LONGTEXT")
   private String rawText;
@@ -47,3 +50,4 @@ public class Receipt {
     }
   }
 }
+
