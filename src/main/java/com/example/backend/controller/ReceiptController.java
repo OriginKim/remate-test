@@ -19,13 +19,28 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class ReceiptController {
 
-  private final ReceiptRepository receiptRepository;
   private final GoogleOcrClient googleOcrClient;
   private final ReceiptService receiptService;
 
   @GetMapping
   public ResponseEntity<List<Receipt>> getAllReceipts() {
-    return ResponseEntity.ok(receiptRepository.findAll());
+    return ResponseEntity.ok(receiptService.getAllReceipts());
+  }
+
+  @GetMapping("/export")
+  public ResponseEntity<byte[]> exportToCsv() {
+    try {
+      List<Receipt> receipts = receiptService.getAllReceipts();
+      byte[] out = receiptService.generateCsv(receipts);
+
+      return ResponseEntity.ok()
+              .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+              .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=receipt_list.csv")
+              .body(out);
+    } catch (Exception e) {
+      log.error("CSV 생성 실패: ", e);
+      return ResponseEntity.internalServerError().build();
+    }
   }
 
   @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

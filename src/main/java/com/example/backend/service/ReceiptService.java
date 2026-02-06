@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -88,5 +89,23 @@ public class ReceiptService {
         if (contentType == null || (!contentType.equals("image/jpeg") && !contentType.equals("image/png") && !contentType.equals("application/pdf"))) {
             throw new RuntimeException("FILE_TYPE_NOT_ALLOWED");
         }
+    }
+
+    public List<Receipt> getAllReceipts() {
+        return receiptRepository.findAll();
+    }
+
+    public byte[] generateCsv(List<Receipt> receipts) {
+        StringBuilder csv = new StringBuilder();
+        csv.append('\ufeff'); // 엑셀 한글 깨짐 방지
+        csv.append("번호,상호명,날짜,금액\n");
+
+        for (Receipt r : receipts) {
+            csv.append(r.getId()).append(",")
+                    .append(r.getStoreName()).append(",")
+                    .append(r.getTradeDate()).append(",")
+                    .append(r.getTotalAmount()).append("\n");
+        }
+        return csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 }
