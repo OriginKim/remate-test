@@ -108,4 +108,14 @@ public class ReceiptService {
         }
         return csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
+
+    @Transactional
+    public Receipt updateStatus(Long id, ReceiptStatus status) {
+        Receipt receipt = receiptRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
+
+        receipt.updateStatus(status);
+
+        return receipt;
+    }
 }

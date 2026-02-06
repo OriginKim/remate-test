@@ -60,4 +60,12 @@ public class ReceiptController {
       return ResponseEntity.internalServerError().body(e.getMessage());
     }
   }
+
+  @PatchMapping("/{id}/status")
+  public ResponseEntity<Receipt> updateStatus(
+          @PathVariable("id") Long id,
+          @RequestParam("status") com.example.backend.domain.receipt.ReceiptStatus status
+  ) {
+    return ResponseEntity.ok(receiptService.updateStatus(id, status));
+  }
 }

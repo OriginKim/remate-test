@@ -49,5 +49,9 @@ public class Receipt {
       this.status = ReceiptStatus.ANALYZING;
     }
   }
+
+  public void updateStatus(ReceiptStatus status) {
+    this.status = status;
+  }
 }
 
