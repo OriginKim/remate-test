@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -21,26 +23,64 @@ public class ReceiptService {
     public Receipt uploadAndProcess(String idempotencyKey, MultipartFile file, Long workspaceId, Long userId) {
         validateFile(file);
 
-
         return receiptRepository.findByIdempotencyKey(idempotencyKey)
                 .orElseGet(() -> {
                     try {
                         JsonNode ocrJson = googleOcrClient.recognize(file.getBytes());
-
-                        Receipt newReceipt = Receipt.builder()
-                                .workspaceId(workspaceId)
-                                .userId(userId)
-                                .idempotencyKey(idempotencyKey)
-                                .rawText(ocrJson.toString())
-                                .status(ReceiptStatus.ANALYZING)
-
-                                .build();
-
-                        return receiptRepository.save(newReceipt);
+                        return parseAndSave(idempotencyKey, ocrJson, workspaceId, userId);
                     } catch (Exception e) {
                         throw new RuntimeException("OCR_PROCESSING_FAILED");
                     }
                 });
+    }
+
+    private Receipt parseAndSave(String key, JsonNode ocrJson, Long workspaceId, Long userId) {
+        JsonNode textAnnotations = ocrJson.path("responses").get(0).path("textAnnotations");
+        String fullText = textAnnotations.isMissingNode() ? "" : textAnnotations.get(0).path("description").asText();
+
+        String storeName = extractStoreName(fullText);
+        int totalAmount = extractTotalAmount(fullText);
+        String tradeDate = extractTradeDate(fullText);
+
+        Receipt receipt = Receipt.builder()
+                .idempotencyKey(key)
+                .workspaceId(workspaceId)
+                .userId(userId)
+                .status(ReceiptStatus.ANALYZING)
+                .storeName(storeName)
+                .totalAmount(totalAmount)
+                .tradeDate(tradeDate)
+                .rawText(ocrJson.toString())
+                .build();
+
+        return receiptRepository.save(receipt);
+    }
+
+    private String extractStoreName(String text) {
+        String[] lines = text.split("\n");
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.length() > 1 && !trimmed.matches(".*(고객용|영수증|대한민국|할인점|신용매출|인수인계).*")) {
+                return trimmed;
+            }
+        }
+        return "알 수 없는 상호";
+    }
+
+    private int extractTotalAmount(String text) {
+        Pattern pattern = Pattern.compile("(합\\s*계|결제\\s*금액|합계\\s*금액|승인\\s*금액)[\\s\\n:]*([0-9,]{3,})");
+        Matcher matcher = pattern.matcher(text);
+        int amount = 0;
+        while (matcher.find()) {
+            amount = Integer.parseInt(matcher.group(2).replace(",", ""));
+        }
+        return amount;
+    }
+
+    private String extractTradeDate(String text) {
+        Pattern pattern = Pattern.compile("(\\d{4}[\\-/]\\d{2}[\\-/]\\d{2}|\\d{2}[\\-/]\\d{2}[\\-/]\\d{2})");
+        Matcher matcher = pattern.matcher(text);
+        return matcher.find() ? matcher.group(1) : "";
     }
 
     private void validateFile(MultipartFile file) {
