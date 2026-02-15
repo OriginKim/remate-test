@@ -35,23 +35,68 @@ public class ReceiptParser {
   }
 
   public static LocalDateTime extractTradeDate(String text) {
-    Pattern p =
+    String[] dateKeywords = {"발행일시", "발행일", "거래일시", "접수일자", "일시", "날짜", "거래일"};
+
+    Pattern dateP =
         Pattern.compile(
-            "(20\\d{2})[\\./\\-\\s](0[1-9]|1[0-2])[\\./\\-\\s](0[1-9]|[12][0-9]|3[01])(?:[\\s\\|]+([01][0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?)?");
+            "(20\\d{2}|\\d{2})[\\./\\-\\s]?(0[1-9]|1[0-2]|[1-9])[\\./\\-\\s]?(0[1-9]|[12][0-9]|3[01]|[1-9])");
+    Pattern timeP =
+        Pattern.compile("(오전|오후)?\\s?([01]?[0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?");
 
-    Matcher m = p.matcher(text);
-    if (m.find()) {
-      int year = Integer.parseInt(m.group(1));
-      int month = Integer.parseInt(m.group(2));
-      int day = Integer.parseInt(m.group(3));
+    int year = 2026, month = 2, day = 15;
+    int hour = 0, minute = 0, second = 0;
+    boolean found = false;
 
-      int hour = (m.group(4) != null) ? Integer.parseInt(m.group(4)) : 0;
-      int minute = (m.group(5) != null) ? Integer.parseInt(m.group(5)) : 0;
-      int second = (m.group(6) != null) ? Integer.parseInt(m.group(6)) : 0;
+    for (String keyword : dateKeywords) {
+      int index = text.indexOf(keyword);
+      if (index != -1) {
+        String sub = text.substring(index, Math.min(index + 50, text.length()));
+        Matcher dm = dateP.matcher(sub);
+        if (dm.find()) {
+          year = Integer.parseInt(dm.group(1));
+          if (year < 100) year += 2000;
+          month = Integer.parseInt(dm.group(2));
+          day = Integer.parseInt(dm.group(3));
 
-      return LocalDateTime.of(year, month, day, hour, minute, second);
+          Matcher tm = timeP.matcher(sub);
+          if (tm.find()) {
+            hour = Integer.parseInt(tm.group(2));
+            minute = Integer.parseInt(tm.group(3));
+            if (tm.group(4) != null) second = Integer.parseInt(tm.group(4));
+            if ("오후".equals(tm.group(1)) && hour < 12) hour += 12;
+            if ("오전".equals(tm.group(1)) && hour == 12) hour = 0;
+          }
+          found = true;
+          break;
+        }
+      }
     }
-    return LocalDateTime.now();
+
+    if (!found) {
+      Matcher dm = dateP.matcher(text);
+      if (dm.find()) {
+        year = Integer.parseInt(dm.group(1));
+        if (year < 100) year += 2000;
+        month = Integer.parseInt(dm.group(2));
+        day = Integer.parseInt(dm.group(3));
+      }
+      Matcher tm = timeP.matcher(text);
+      if (tm.find()) {
+        hour = Integer.parseInt(tm.group(2));
+        minute = Integer.parseInt(tm.group(3));
+        if ("오후".equals(tm.group(1)) && hour < 12) hour += 12;
+        if ("오전".equals(tm.group(1)) && hour == 12) hour = 0;
+      }
+    }
+
+    try {
+      if (year > 2030 || year < 2010) year = 2026;
+      if (month < 1 || month > 12) month = 1;
+      if (day < 1 || day > 31) day = 1;
+      return LocalDateTime.of(year, month, day, hour, minute, second);
+    } catch (Exception e) {
+      return LocalDateTime.now();
+    }
   }
 
   public static String extractStoreName(String text) {
