@@ -180,8 +180,8 @@ public class ReceiptService {
 
   public Receipt getReceiptSecurely(Long id, Long userId) {
     return receiptRepository
-            .findByIdAndUserId(id, userId)
-            .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
+        .findByIdAndUserId(id, userId)
+        .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
   }
 
   public byte[] generateCsv(List<Receipt> receipts) {
