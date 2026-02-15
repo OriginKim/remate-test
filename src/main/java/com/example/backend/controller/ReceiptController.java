@@ -73,9 +73,12 @@ public class ReceiptController {
       @PathVariable Long id,
       @RequestParam(required = false) Integer totalAmount,
       @RequestParam(required = false) String storeName,
-      @RequestParam(required = false) String tradeDate) {
+      @RequestParam(required = false, name = "tradeDate")
+          @org.springframework.format.annotation.DateTimeFormat(
+              iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
+          java.time.LocalDateTime tradeAt) {
 
-    return receiptService.updateReceipt(id, totalAmount, storeName, tradeDate);
+    return receiptService.updateReceipt(id, totalAmount, storeName, tradeAt);
   }
 
   @PostMapping(value = "/upload/multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

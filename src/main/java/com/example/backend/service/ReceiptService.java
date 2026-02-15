@@ -12,6 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -84,7 +86,10 @@ public class ReceiptService {
 
     String storeName = ReceiptParser.extractStoreName(fullText);
     int totalAmount = ReceiptParser.extractTotalAmount(fullText);
-    String tradeDate = ReceiptParser.extractTradeDate(fullText);
+    LocalDateTime tradeAt = ReceiptParser.extractTradeDate(fullText);
+
+    int hour = tradeAt.getHour();
+    boolean isNightTime = (hour >= 23 || hour < 6);
 
     Receipt receipt =
         Receipt.builder()
@@ -95,7 +100,8 @@ public class ReceiptService {
             .status(ReceiptStatus.ANALYZING)
             .storeName(storeName)
             .totalAmount(totalAmount)
-            .tradeDate(tradeDate)
+            .tradeAt(tradeAt)
+            .nightTime(isNightTime)
             .rawText(ocrJson.toString())
             .filePath(filePath)
             .build();
@@ -145,12 +151,14 @@ public class ReceiptService {
     csv.append('\ufeff');
     csv.append("번호,상호명,날짜,금액\n");
 
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     for (Receipt r : receipts) {
       csv.append(r.getId())
           .append(",")
           .append(r.getStoreName())
           .append(",")
-          .append(r.getTradeDate())
+          .append(r.getTradeAt() != null ? r.getTradeAt().format(formatter) : "")
           .append(",")
           .append(r.getTotalAmount())
           .append("\n");
@@ -167,10 +175,11 @@ public class ReceiptService {
   }
 
   @Transactional
-  public Receipt updateReceipt(Long id, Integer totalAmount, String storeName, String tradeDate) {
+  public Receipt updateReceipt(
+      Long id, Integer totalAmount, String storeName, LocalDateTime tradeAt) {
     Receipt receipt =
         receiptRepository.findById(id).orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
-    receipt.updateInfo(totalAmount, storeName, tradeDate);
+    receipt.updateInfo(totalAmount, storeName, tradeAt);
     return receipt;
   }
 
