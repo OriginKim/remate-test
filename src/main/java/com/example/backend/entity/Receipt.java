@@ -47,6 +47,8 @@ public class Receipt {
   @Column(nullable = false)
   private Long userId;
 
+  private String rejectionReason;
+
   private LocalDateTime createdAt;
 
   @PrePersist
@@ -57,8 +59,11 @@ public class Receipt {
     }
   }
 
-  public void updateStatus(ReceiptStatus status) {
+  public void updateStatus(ReceiptStatus status, String reason) {
     this.status = status;
+    if (status == ReceiptStatus.REJECTED) {
+      this.rejectionReason = reason;
+    }
   }
 
   public void updateInfo(Integer totalAmount, String storeName, LocalDateTime tradeAt) {

@@ -33,7 +33,7 @@ public class ReceiptService {
   private final ReceiptRepository receiptRepository;
   private final GoogleOcrClient googleOcrClient;
   private final GeminiService geminiService;
-  private final AuditLogService auditLogService; // 감사 로그 서비스 연동
+  private final AuditLogService auditLogService;
 
   private final String uploadDir =
       System.getProperty("user.home") + File.separator + "remate_uploads" + File.separator;
@@ -76,14 +76,13 @@ public class ReceiptService {
   }
 
   @Transactional
-  public Receipt updateStatus(Long id, Long userId, ReceiptStatus status) {
+  public Receipt updateStatus(Long id, Long userId, ReceiptStatus status, String reason) {
     Receipt receipt = getReceiptSecurely(id, userId);
     ReceiptStatus oldStatus = receipt.getStatus();
 
-    receipt.updateStatus(status);
+    receipt.updateStatus(status, reason);
 
-    // 상태 변경 로그 기록
-    auditLogService.logStatusChange(id, userId, oldStatus, status, "사용자 요청에 의한 상태 변경");
+    auditLogService.logStatusChange(id, userId, oldStatus, status, reason);
 
     return receipt;
   }
@@ -96,7 +95,6 @@ public class ReceiptService {
 
     receipt.updateInfo(totalAmount, storeName, tradeAt);
 
-    // 정보 수정으로 인해 상태가 변한 경우 로그 기록
     if (oldStatus != receipt.getStatus()) {
       auditLogService.logStatusChange(
           id, userId, oldStatus, receipt.getStatus(), "정보 수정으로 인한 상태 변경");

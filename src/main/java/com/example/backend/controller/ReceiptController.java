@@ -1,9 +1,10 @@
 package com.example.backend.controller;
 
 import com.example.backend.domain.receipt.ReceiptStatus;
+import com.example.backend.entity.AuditLog;
 import com.example.backend.entity.Receipt;
+import com.example.backend.service.AuditLogService;
 import com.example.backend.service.ReceiptService;
-import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,16 +22,17 @@ import org.springframework.web.multipart.MultipartFile;
 public class ReceiptController {
 
   private final ReceiptService receiptService;
+  private final AuditLogService auditLogService;
 
   @GetMapping
   public ResponseEntity<List<Receipt>> getAllReceipts() {
-    return ResponseEntity.ok(receiptService.getReceipts(1L, false));
+    return ResponseEntity.ok(receiptService.getReceipts(1L, true));
   }
 
   @GetMapping("/export")
   public ResponseEntity<byte[]> exportToCsv() {
     try {
-      List<Receipt> receipts = receiptService.getReceipts(1L, false);
+      List<Receipt> receipts = receiptService.getReceipts(1L, true);
       byte[] out = receiptService.generateCsv(receipts);
 
       return ResponseEntity.ok()
@@ -62,16 +64,22 @@ public class ReceiptController {
 
   @PatchMapping("/{id}/status")
   public ResponseEntity<Receipt> updateStatus(
-      @PathVariable Long id, @RequestParam ReceiptStatus status) {
-    return ResponseEntity.ok(receiptService.updateStatus(id, 1L, status));
+      @PathVariable Long id,
+      @RequestParam ReceiptStatus status,
+      @RequestParam(required = false, defaultValue = "관리자 요청") String reason) {
+    return ResponseEntity.ok(receiptService.updateStatus(id, 1L, status, reason));
   }
 
   @PutMapping("/{id}")
   public ResponseEntity<Receipt> updateReceipt(
-      @PathVariable Long id, @RequestBody ReceiptUpdateRequest request) {
+      @PathVariable Long id, @RequestBody java.util.Map<String, Object> payload) {
+
+    String storeName = (String) payload.get("storeName");
+    Integer totalAmount = (Integer) payload.get("totalAmount");
+
     return ResponseEntity.ok(
         receiptService.updateReceipt(
-            id, 1L, request.totalAmount(), request.storeName(), request.tradeAt()));
+            id, 1L, totalAmount, storeName, java.time.LocalDateTime.now()));
   }
 
   @PostMapping(value = "/upload/multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -88,6 +96,14 @@ public class ReceiptController {
     return ResponseEntity.ok(results);
   }
 
-  public static record ReceiptUpdateRequest(
-      Integer totalAmount, String storeName, LocalDateTime tradeAt) {}
+  @GetMapping("/{id}/history")
+  public ResponseEntity<List<AuditLog>> getHistory(@PathVariable Long id) {
+    try {
+      List<AuditLog> logs = auditLogService.getHistory(id);
+      return ResponseEntity.ok(logs);
+    } catch (Exception e) {
+      log.error("이력 조회 실패 - receiptId: {}", id, e);
+      return ResponseEntity.internalServerError().build();
+    }
+  }
 }
