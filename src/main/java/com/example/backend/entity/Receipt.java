@@ -53,5 +53,21 @@ public class Receipt {
   public void updateStatus(ReceiptStatus status) {
     this.status = status;
   }
+
+  public void updateInfo(Integer totalAmount, String storeName, String tradeDate) {
+    if (totalAmount != null) {
+      this.totalAmount = totalAmount;
+    }
+    if (storeName != null && !storeName.isEmpty()) {
+      this.storeName = storeName;
+    }
+    if (tradeDate != null && !tradeDate.isEmpty()) {
+      this.tradeDate = tradeDate;
+    }
+    // 사용자가 직접 확인하고 수정한 것이므로 상태를 '승인(완료)'으로 변경
+    this.status = ReceiptStatus.APPROVED;
+  }
 }
+
+
 
