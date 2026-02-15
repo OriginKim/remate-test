@@ -34,6 +34,9 @@ public class ReceiptService {
   private final GoogleOcrClient googleOcrClient;
   private final GeminiService geminiService;
 
+  private final String uploadDir =
+      System.getProperty("user.home") + File.separator + "remate_uploads" + File.separator;
+
   @Transactional
   public Receipt uploadAndProcess(
       String idempotencyKey, MultipartFile file, Long workspaceId, Long userId) {
@@ -118,9 +121,6 @@ public class ReceiptService {
             .build());
   }
 
-  private final String uploadDir =
-      System.getProperty("user.home") + File.separator + "remate_uploads" + File.separator;
-
   private String saveFileToLocal(MultipartFile file) {
     try {
       File dir = new File(uploadDir);
@@ -145,13 +145,30 @@ public class ReceiptService {
   }
 
   private void validateFile(MultipartFile file) {
-    String contentType = file.getContentType();
-    if (contentType == null
-        || (!contentType.equals("image/jpeg")
-            && !contentType.equals("image/png")
-            && !contentType.equals("application/pdf"))) {
-      throw new RuntimeException("FILE_TYPE_NOT_ALLOWED");
+    try {
+      byte[] header = new byte[8];
+      if (file.getInputStream().read(header) < 4) {
+        throw new RuntimeException("FILE_TOO_SMALL");
+      }
+
+      if (isJpeg(header) || isPng(header)) {
+        return;
+      }
+      throw new RuntimeException("INVALID_FILE_SIGNATURE");
+    } catch (IOException e) {
+      throw new RuntimeException("FILE_READ_ERROR");
     }
+  }
+
+  private boolean isJpeg(byte[] h) {
+    return (h[0] & 0xFF) == 0xFF && (h[1] & 0xFF) == 0xD8 && (h[2] & 0xFF) == 0xFF;
+  }
+
+  private boolean isPng(byte[] h) {
+    return (h[0] & 0xFF) == 0x89
+        && (h[1] & 0xFF) == 0x50
+        && (h[2] & 0xFF) == 0x4E
+        && (h[3] & 0xFF) == 0x47;
   }
 
   public List<Receipt> getAllReceipts() {
