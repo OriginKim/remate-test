@@ -121,4 +121,15 @@ public class ReceiptService {
 
         return receipt;
     }
+
+    @Transactional
+    public Receipt updateReceipt(Long id, Integer totalAmount, String storeName, String tradeDate) {
+        Receipt receipt = receiptRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
+
+        receipt.updateInfo(totalAmount, storeName, tradeDate);
+
+        return receipt;
+    }
+
 }
