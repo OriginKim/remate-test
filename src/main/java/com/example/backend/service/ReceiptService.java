@@ -7,11 +7,15 @@ import com.example.backend.ocr.ReceiptParser;
 import com.example.backend.repository.ReceiptRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReceiptService {
@@ -23,28 +27,37 @@ public class ReceiptService {
     public Receipt uploadAndProcess(String idempotencyKey, MultipartFile file, Long workspaceId, Long userId) {
         validateFile(file);
 
-        return receiptRepository.findByIdempotencyKey(idempotencyKey)
-                .orElseGet(() -> {
-                    try {
-                        JsonNode ocrJson = googleOcrClient.recognize(file.getBytes());
-                        return parseAndSave(idempotencyKey, ocrJson, workspaceId, userId);
-                    } catch (Exception e) {
-                        throw new RuntimeException("OCR_PROCESSING_FAILED");
-                    }
-                });
+        try {
+            byte[] fileBytes = file.getBytes();
+            byte[] hashBytes = MessageDigest.getInstance("MD5").digest(fileBytes);
+            String fileHash = HexFormat.of().formatHex(hashBytes);
+
+            return receiptRepository.findByFileHash(fileHash)
+                    .orElseGet(() -> receiptRepository.findByIdempotencyKey(idempotencyKey)
+                            .orElseGet(() -> {
+                                try {
+                                    JsonNode ocrJson = googleOcrClient.recognize(fileBytes);
+                                    return parseAndSave(idempotencyKey, fileHash, ocrJson, workspaceId, userId);
+                                } catch (Exception e) {
+                                    throw new RuntimeException("OCR_PROCESSING_FAILED");
+                                }
+                            }));
+        } catch (Exception e) {
+            throw new RuntimeException("FILE_PROCESSING_FAILED", e);
+        }
     }
 
-    private Receipt parseAndSave(String key, JsonNode ocrJson, Long workspaceId, Long userId) {
+    private Receipt parseAndSave(String key, String fileHash, JsonNode ocrJson, Long workspaceId, Long userId) {
         JsonNode textAnnotations = ocrJson.path("responses").get(0).path("textAnnotations");
         String fullText = textAnnotations.isMissingNode() ? "" : textAnnotations.get(0).path("description").asText();
 
-        // 💡 ReceiptParser 유틸리티를 사용하여 데이터 추출
         String storeName = ReceiptParser.extractStoreName(fullText);
         int totalAmount = ReceiptParser.extractTotalAmount(fullText);
         String tradeDate = ReceiptParser.extractTradeDate(fullText);
 
         Receipt receipt = Receipt.builder()
                 .idempotencyKey(key)
+                .fileHash(fileHash)
                 .workspaceId(workspaceId)
                 .userId(userId)
                 .status(ReceiptStatus.ANALYZING)
@@ -86,9 +99,7 @@ public class ReceiptService {
     public Receipt updateStatus(Long id, ReceiptStatus status) {
         Receipt receipt = receiptRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
-
         receipt.updateStatus(status);
-
         return receipt;
     }
 
@@ -96,9 +107,7 @@ public class ReceiptService {
     public Receipt updateReceipt(Long id, Integer totalAmount, String storeName, String tradeDate) {
         Receipt receipt = receiptRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
-
         receipt.updateInfo(totalAmount, storeName, tradeDate);
-
         return receipt;
     }
 }

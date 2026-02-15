@@ -30,6 +30,9 @@ public class Receipt {
   @Column(unique = true)
   private String idempotencyKey;
 
+  @Column(name = "file_hash", unique = true)
+  private String fileHash;
+
   @Lob
   @Column(columnDefinition = "LONGTEXT")
   private String rawText;
@@ -64,7 +67,6 @@ public class Receipt {
     if (tradeDate != null && !tradeDate.isEmpty()) {
       this.tradeDate = tradeDate;
     }
-    // 사용자가 직접 확인하고 수정한 것이므로 상태를 '승인(완료)'으로 변경
     this.status = ReceiptStatus.APPROVED;
   }
 }

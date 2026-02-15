@@ -8,4 +8,6 @@ import java.util.Optional;
 @Repository
 public interface ReceiptRepository extends JpaRepository<Receipt, Long> {
     Optional<Receipt> findByIdempotencyKey(String idempotencyKey);
+
+    Optional<Receipt> findByFileHash(String fileHash);
 }
