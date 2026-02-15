@@ -72,6 +72,3 @@ public class Receipt {
     this.status = ReceiptStatus.APPROVED;
   }
 }
-
-
-
