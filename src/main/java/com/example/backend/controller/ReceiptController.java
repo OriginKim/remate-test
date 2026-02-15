@@ -68,4 +68,14 @@ public class ReceiptController {
   ) {
     return ResponseEntity.ok(receiptService.updateStatus(id, status));
   }
+
+  @PatchMapping("/{id}")
+  public Receipt updateReceipt(
+          @PathVariable Long id,
+          @RequestParam(required = false) Integer totalAmount,
+          @RequestParam(required = false) String storeName,
+          @RequestParam(required = false) String tradeDate) {
+
+    return receiptService.updateReceipt(id, totalAmount, storeName, tradeDate);
+  }
 }
