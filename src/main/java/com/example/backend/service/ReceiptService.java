@@ -118,9 +118,11 @@ public class ReceiptService {
             .build());
   }
 
+  private final String uploadDir =
+      System.getProperty("user.home") + File.separator + "remate_uploads" + File.separator;
+
   private String saveFileToLocal(MultipartFile file) {
     try {
-      String uploadDir = "C:/receipt_uploads/";
       File dir = new File(uploadDir);
       if (!dir.exists() && !dir.mkdirs()) {
         throw new IOException("디렉토리 생성 실패");
@@ -133,7 +135,7 @@ public class ReceiptService {
               : "";
 
       String savedFileName = UUID.randomUUID() + extension;
-      Path targetPath = Paths.get(uploadDir + savedFileName);
+      Path targetPath = Paths.get(uploadDir).resolve(savedFileName);
       Files.copy(file.getInputStream(), targetPath);
 
       return savedFileName;
@@ -156,7 +158,6 @@ public class ReceiptService {
     return receiptRepository.findAll();
   }
 
-  // 빌드 오류 해결을 위해 다시 추가한 CSV 생성 메서드
   public byte[] generateCsv(List<Receipt> receipts) {
     StringBuilder csv = new StringBuilder();
     csv.append('\ufeff');
