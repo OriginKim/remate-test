@@ -78,4 +78,21 @@ public class ReceiptController {
 
     return receiptService.updateReceipt(id, totalAmount, storeName, tradeDate);
   }
+
+  @PostMapping(value = "/upload/multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<List<Receipt>> uploadMultiple(
+          @RequestPart("files") List<MultipartFile> files,
+          @RequestPart("workspaceId") String workspaceId,
+          @RequestPart("userId") String userId
+  ) {
+    if (files == null || files.isEmpty()) {
+      return ResponseEntity.badRequest().build();
+    }
+
+    Long wId = Long.parseLong(workspaceId);
+    Long uId = Long.parseLong(userId);
+
+    List<Receipt> results = receiptService.uploadMultiple(files, wId, uId);
+    return ResponseEntity.ok(results);
+  }
 }

@@ -110,4 +110,20 @@ public class ReceiptService {
         receipt.updateInfo(totalAmount, storeName, tradeDate);
         return receipt;
     }
+
+    @Transactional
+    public List<Receipt> uploadMultiple(List<MultipartFile> files, Long workspaceId, Long userId) {
+        return files.stream()
+                .map(file -> {
+                    try {
+                        String tempKey = "multi-" + java.util.UUID.randomUUID();
+                        return uploadAndProcess(tempKey, file, workspaceId, userId);
+                    } catch (Exception e) {
+                        log.error("파일 업로드 중 개별 실패: {}", file.getOriginalFilename(), e);
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toList());
+    }
 }
