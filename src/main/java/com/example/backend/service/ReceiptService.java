@@ -11,9 +11,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import java.util.List;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -36,9 +45,13 @@ public class ReceiptService {
                     .orElseGet(() -> receiptRepository.findByIdempotencyKey(idempotencyKey)
                             .orElseGet(() -> {
                                 try {
+                                    String savedFileName = saveFileToLocal(file);
+
                                     JsonNode ocrJson = googleOcrClient.recognize(fileBytes);
-                                    return parseAndSave(idempotencyKey, fileHash, ocrJson, workspaceId, userId);
+
+                                    return parseAndSave(idempotencyKey, fileHash, ocrJson, workspaceId, userId, savedFileName);
                                 } catch (Exception e) {
+                                    log.error("OCR 분석 중 에러: ", e);
                                     throw new RuntimeException("OCR_PROCESSING_FAILED");
                                 }
                             }));
@@ -47,7 +60,7 @@ public class ReceiptService {
         }
     }
 
-    private Receipt parseAndSave(String key, String fileHash, JsonNode ocrJson, Long workspaceId, Long userId) {
+    private Receipt parseAndSave(String key, String fileHash, JsonNode ocrJson, Long workspaceId, Long userId, String filePath) {
         JsonNode textAnnotations = ocrJson.path("responses").get(0).path("textAnnotations");
         String fullText = textAnnotations.isMissingNode() ? "" : textAnnotations.get(0).path("description").asText();
 
@@ -65,9 +78,33 @@ public class ReceiptService {
                 .totalAmount(totalAmount)
                 .tradeDate(tradeDate)
                 .rawText(ocrJson.toString())
+                .filePath(filePath)
                 .build();
 
         return receiptRepository.save(receipt);
+    }
+
+    private String saveFileToLocal(MultipartFile file) {
+        try {
+            String uploadDir = "C:/receipt_uploads/";
+            File dir = new File(uploadDir);
+            if (!dir.exists()) dir.mkdirs();
+
+            String originalFilename = file.getOriginalFilename();
+            String extension = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+
+            String savedFileName = UUID.randomUUID().toString() + extension;
+            Path targetPath = Paths.get(uploadDir + savedFileName);
+            Files.copy(file.getInputStream(), targetPath);
+
+            return savedFileName;
+        } catch (IOException e) {
+            log.error("파일 저장 실패: ", e);
+            throw new RuntimeException("FILE_SAVE_FAILED");
+        }
     }
 
     private void validateFile(MultipartFile file) {
@@ -116,14 +153,14 @@ public class ReceiptService {
         return files.stream()
                 .map(file -> {
                     try {
-                        String tempKey = "multi-" + java.util.UUID.randomUUID();
+                        String tempKey = "multi-" + UUID.randomUUID();
                         return uploadAndProcess(tempKey, file, workspaceId, userId);
                     } catch (Exception e) {
                         log.error("파일 업로드 중 개별 실패: {}", file.getOriginalFilename(), e);
                         return null;
                     }
                 })
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toList());
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 }

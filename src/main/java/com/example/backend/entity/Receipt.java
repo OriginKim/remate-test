@@ -33,6 +33,8 @@ public class Receipt {
   @Column(name = "file_hash", unique = true)
   private String fileHash;
 
+  private String filePath;
+
   @Lob
   @Column(columnDefinition = "LONGTEXT")
   private String rawText;
