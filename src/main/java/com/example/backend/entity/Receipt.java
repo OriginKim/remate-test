@@ -62,6 +62,10 @@ public class Receipt {
   }
 
   public void updateStatus(ReceiptStatus status, String reason) {
+    if (this.status == ReceiptStatus.APPROVED && status != ReceiptStatus.APPROVED) {
+      throw new IllegalStateException("이미 승인된 영수증의 상태를 변경할 수 없습니다.");
+    }
+
     this.status = status;
     if (status == ReceiptStatus.REJECTED) {
       this.rejectionReason = reason;
@@ -69,6 +73,10 @@ public class Receipt {
   }
 
   public void updateInfo(Integer totalAmount, String storeName, LocalDateTime tradeAt) {
+    if (this.status == ReceiptStatus.APPROVED) {
+      throw new IllegalStateException("이미 승인된 영수증은 수정할 수 없습니다.");
+    }
+
     if (totalAmount != null) {
       this.totalAmount = totalAmount;
     }

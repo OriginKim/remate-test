@@ -31,7 +31,7 @@
         .REJECTED { background:#fef2f2; color:#b91c1c; }
         .NEED_MANUAL { background:#f1f5f9; color:#475569; }
 
-        /* 툴팁 스타일 */
+
         .status-badge[data-reason]::after {
             content: attr(data-reason);
             position: absolute;
@@ -172,9 +172,9 @@
             const html = receiptData.map(r => {
                 const isProcessable = (r.status === 'WAITING' || r.status === 'NEED_MANUAL');
                 const dis = isProcessable ? '' : 'disabled';
+                //const dis = ''; // 무조건 버튼 활성화
                 const tradeAt = r.tradeAt ? r.tradeAt.replace('T', ' ').substring(0, 16) : '-';
 
-                // 1. 야간 태그 변수 생성 (이 부분 추가!)
                 const nightBadge = r.nightTime
                     ? '<span style="background:#1e293b; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.65rem; margin-left:4px;">🌙 야간</span>'
                     : '';
@@ -280,10 +280,9 @@
         // 영수증 이미지 표시
         const preview = el('receiptPreview');
         if (r.filePath) {
-            const imageSrc = `/images/${r.filePath}`; // 백엔드가 주는 파일명 그대로 사용
+            const imageSrc = `/images/${r.filePath}`;
             preview.innerHTML = `<img src="${escapeHtml(imageSrc)}" alt="영수증 이미지" onerror="this.parentElement.innerHTML='<div class=\\'receipt-preview-placeholder\\'>이미지를 찾을 수 없습니다</div>'">`;
         } else {
-            // filePath가 없는 경우 플레이스홀더 표시
             preview.innerHTML = '<div class="receipt-preview-placeholder">영수증 이미지가 없습니다</div>';
         }
 
