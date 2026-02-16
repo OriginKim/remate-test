@@ -133,6 +133,12 @@ public class ReceiptService {
     int totalAmount = aiResult.path("totalAmount").asInt(0);
     String tradeAtStr = aiResult.path("tradeAt").asText();
 
+    log.info(
+        "AI 파싱 결과 - storeName: {}, totalAmount: {}, tradeAtStr: {}",
+        storeName,
+        totalAmount,
+        tradeAtStr);
+
     ReceiptStatus finalStatus =
         (aiResult.has("storeName") && !storeName.equals("알 수 없는 상호"))
             ? ReceiptStatus.WAITING
@@ -147,7 +153,9 @@ public class ReceiptService {
 
     boolean isNightTime = (tradeAt.getHour() >= 23 || tradeAt.getHour() < 6);
 
-    return receiptRepository.save(
+    log.info("야간 여부 계산 - tradeAt hour: {}, isNightTime: {}", tradeAt.getHour(), isNightTime);
+
+    Receipt receipt =
         Receipt.builder()
             .idempotencyKey(key)
             .fileHash(fileHash)
@@ -160,7 +168,9 @@ public class ReceiptService {
             .nightTime(isNightTime)
             .rawText(fullText)
             .filePath(filePath)
-            .build());
+            .build();
+
+    return receiptRepository.save(receipt);
   }
 
   private String saveFileToLocal(MultipartFile file) {

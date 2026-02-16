@@ -27,7 +27,9 @@ public class Receipt {
 
   private int totalAmount;
 
-  private boolean nightTime;
+  @Builder.Default
+  @Column(name = "night_time", columnDefinition = "TINYINT(1)")
+  private boolean nightTime = false;
 
   @Column(unique = true)
   private String idempotencyKey;
@@ -75,6 +77,7 @@ public class Receipt {
     }
     if (tradeAt != null) {
       this.tradeAt = tradeAt;
+      this.nightTime = (tradeAt.getHour() >= 23 || tradeAt.getHour() < 6);
     }
     this.status = ReceiptStatus.APPROVED;
   }
