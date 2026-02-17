@@ -1,6 +1,7 @@
 package com.example.backend.entity;
 
 import com.example.backend.domain.receipt.ReceiptStatus;
+import com.example.backend.domain.receipt.SystemErrorCode;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import lombok.*;
@@ -20,6 +21,9 @@ public class Receipt {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false)
   private ReceiptStatus status;
+
+  @Enumerated(EnumType.STRING)
+  private SystemErrorCode systemErrorCode;
 
   private String storeName;
 
@@ -72,6 +76,11 @@ public class Receipt {
     }
   }
 
+  public void updateSystemError(SystemErrorCode errorCode) {
+    this.status = ReceiptStatus.FAILED_SYSTEM;
+    this.systemErrorCode = errorCode;
+  }
+
   public void updateInfo(Integer totalAmount, String storeName, LocalDateTime tradeAt) {
     if (this.status == ReceiptStatus.APPROVED) {
       throw new IllegalStateException("이미 승인된 영수증은 수정할 수 없습니다.");
@@ -88,5 +97,6 @@ public class Receipt {
       this.nightTime = (tradeAt.getHour() >= 23 || tradeAt.getHour() < 6);
     }
     this.status = ReceiptStatus.APPROVED;
+    this.systemErrorCode = null;
   }
 }

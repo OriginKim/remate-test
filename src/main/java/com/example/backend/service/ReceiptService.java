@@ -57,6 +57,8 @@ public class ReceiptService {
                           () -> {
                             try {
                               String savedFileName = saveFileToLocal(file);
+                              //                              if (true) throw new IOException("테스트용
+                              // OCR 연결 실패");
                               JsonNode ocrJson = googleOcrClient.recognize(fileBytes);
                               return parseAndSave(
                                   idempotencyKey,
@@ -67,7 +69,8 @@ public class ReceiptService {
                                   savedFileName);
                             } catch (Exception e) {
                               log.error("OCR 분석 에러", e);
-                              throw new RuntimeException("OCR_PROCESSING_FAILED");
+                              return saveFailedReceipt(
+                                  idempotencyKey, fileHash, workspaceId, userId, null, e);
                             }
                           }));
     } catch (Exception e) {
@@ -254,5 +257,30 @@ public class ReceiptService {
             })
         .filter(Objects::nonNull)
         .collect(Collectors.toList());
+  }
+
+  private Receipt saveFailedReceipt(
+      String key, String hash, Long workspaceId, Long userId, String path, Exception e) {
+    com.example.backend.domain.receipt.SystemErrorCode errorCode =
+        com.example.backend.domain.receipt.SystemErrorCode.UNKNOWN_ERROR;
+
+    if (e instanceof IOException) {
+      errorCode = com.example.backend.domain.receipt.SystemErrorCode.OCR_CONNECTION_FAILURE;
+    } else if (e.getMessage() != null && e.getMessage().contains("parse")) {
+      errorCode = com.example.backend.domain.receipt.SystemErrorCode.AI_PARSING_ERROR;
+    }
+
+    Receipt receipt =
+        Receipt.builder()
+            .idempotencyKey(key)
+            .fileHash(hash)
+            .workspaceId(workspaceId)
+            .userId(userId)
+            .status(ReceiptStatus.FAILED_SYSTEM)
+            .systemErrorCode(errorCode)
+            .filePath(path)
+            .build();
+
+    return receiptRepository.save(receipt);
   }
 }
