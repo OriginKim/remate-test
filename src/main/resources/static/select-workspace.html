@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>ReMate | 워크스페이스 선택</title>
+  <style>
+    :root { --primary:#3b82f6; --bg:#f8fafc; --card:#ffffff; --text:#1e293b; }
+    body { font-family:'Pretendard',sans-serif; background:var(--bg); margin:0; padding:40px 20px; display:flex; flex-direction:column; align-items:center; color:var(--text); }
+    .card { background:var(--card); padding:32px; border-radius:24px; box-shadow:0 10px 25px rgba(0,0,0,0.05); width:100%; max-width:500px; margin-bottom:24px; }
+    .btn-main { background:#1e293b; color:#fff; padding:14px 28px; border:none; border-radius:12px; cursor:pointer; font-weight:600; width:100%; margin-top:10px; }
+    input { width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:10px; box-sizing:border-box; }
+    .member-item { display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #f1f5f9; }
+    .status-pending { color:#f59e0b; font-weight:700; font-size:0.8rem; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>🚪 워크스페이스 참여 신청</h2>
+  <input type="number" id="workspaceId" placeholder="워크스페이스 ID 입력">
+  <button class="btn-main" onclick="requestJoin()">참여 신청하기</button>
+</div>
+
+<div class="card">
+  <h3>👑 관리자 승인 대기 명단</h3>
+  <div id="pendingList">
+    <p style="color:#94a3b8; text-align:center;">워크스페이스 ID를 입력해 확인하세요.</p>
+  </div>
+</div>
+
+<script>
+  // userId 변수 삭제: 서버가 토큰을 통해 유저를 식별합니다.
+
+  async function requestJoin() {
+    const wsId = document.getElementById('workspaceId').value;
+    const token = localStorage.getItem('accessToken');
+
+    if (!wsId) return alert("워크스페이스 ID를 입력해주세요.");
+
+    try {
+      const res = await fetch(`/api/workspaces/${wsId}/join`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}` // 서버의 getCurrentUserId()와 연동
+        }
+      });
+      if (!res.ok) throw new Error('신청 실패 (이미 신청했거나 권한이 없습니다)');
+      alert('신청 완료!');
+      loadPendingMembers();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function loadPendingMembers() {
+    const wsId = document.getElementById('workspaceId').value;
+    if(!wsId) return;
+
+    const token = localStorage.getItem('accessToken');
+
+    try {
+      const res = await fetch(`/api/workspaces/${wsId}/pending`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      const html = data.map(m => `
+            <div class="member-item">
+                <span>사용자 ID: ${m.userId} <span class="status-pending">[대기중]</span></span>
+                <div>
+                    <button onclick="processMember(${m.id}, 'approve')" style="color:#16a34a; border:none; background:none; cursor:pointer; font-weight:600;">승인</button>
+                    <button onclick="processMember(${m.id}, 'reject')" style="color:#dc2626; border:none; background:none; cursor:pointer; font-weight:600;">거절</button>
+                </div>
+            </div>
+        `).join('');
+      document.getElementById('pendingList').innerHTML = html || '<p style="text-align:center; color:#94a3b8;">대기 중인 멤버가 없습니다.</p>';
+    } catch (e) { console.error(e); }
+  }
+
+  async function processMember(membershipId, action) {
+    const token = localStorage.getItem('accessToken');
+    try {
+      const res = await fetch(`/api/workspaces/members/${membershipId}/${action}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('처리 실패');
+      alert(action === 'approve' ? '승인되었습니다.' : '거절되었습니다.');
+      loadPendingMembers();
+    } catch (e) { alert(e.message); }
+  }
+</script>
+</body>
+</html>
