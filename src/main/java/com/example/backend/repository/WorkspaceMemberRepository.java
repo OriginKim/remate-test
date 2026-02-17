@@ -9,4 +9,6 @@ public interface WorkspaceMemberRepository extends JpaRepository<WorkspaceMember
   Optional<WorkspaceMember> findByWorkspaceIdAndUserId(Long workspaceId, Long userId);
 
   List<WorkspaceMember> findAllByWorkspaceId(Long workspaceId);
+
+  List<WorkspaceMember> findAllByUserId(Long userId);
 }

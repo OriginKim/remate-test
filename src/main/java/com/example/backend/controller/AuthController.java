@@ -1,10 +1,14 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.AuthStatusResponse;
-import com.example.backend.dto.UserRegisterRequestDto; // 새로 만들 DTO
-import com.example.backend.service.AuthService; // 아까 만든 서비스
+import com.example.backend.service.AuthService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -14,12 +18,16 @@ public class AuthController {
   private final AuthService authService;
 
   @GetMapping("/status")
-  public AuthStatusResponse getAuthStatus() {
-    return new AuthStatusResponse(true, "test-user@gmail.com", "DTO를 이용한 검증 성공!");
-  }
+  public ResponseEntity<AuthStatusResponse> getStatus() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-  @PostMapping("/signup")
-  public Long signup(@RequestBody UserRegisterRequestDto dto) {
-    return authService.join(dto.getEmail(), dto.getPassword(), dto.getName());
+    if (authentication == null
+        || !authentication.isAuthenticated()
+        || "anonymousUser".equals(authentication.getName())) {
+      return ResponseEntity.ok(
+          new AuthStatusResponse(false, null, "미인증 상태", null, null, null, null));
+    }
+
+    return ResponseEntity.ok(authService.getAuthStatusByPrincipal(authentication.getName()));
   }
 }

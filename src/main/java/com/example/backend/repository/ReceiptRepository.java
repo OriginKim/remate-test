@@ -15,4 +15,19 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long> {
   List<Receipt> findAllByUserId(Long userId);
 
   Optional<Receipt> findByIdAndUserId(Long id, Long userId);
+
+  List<Receipt> findAllByWorkspaceId(Long workspaceId);
+
+  Optional<Receipt> findByIdAndWorkspaceId(Long id, Long workspaceId);
+
+  List<Receipt> findAllByWorkspaceIdAndUserId(Long workspaceId, Long userId);
+
+  @org.springframework.data.jpa.repository.Query(
+      "SELECT "
+          + "count(r) as totalCount, "
+          + "sum(case when r.status = 'WAITING' or r.status = 'NEED_MANUAL' then 1 else 0 end) as pendingCount, "
+          + "sum(r.totalAmount) as totalAmount "
+          + "FROM Receipt r WHERE r.workspaceId = :workspaceId")
+  java.util.Map<String, Object> getWorkspaceStats(
+      @org.springframework.data.repository.query.Param("workspaceId") Long workspaceId);
 }

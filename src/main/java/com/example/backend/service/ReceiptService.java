@@ -1,15 +1,17 @@
 package com.example.backend.service;
 
 import com.example.backend.domain.receipt.ReceiptStatus;
+import com.example.backend.domain.receipt.SystemErrorCode;
+import com.example.backend.dto.ReceiptSummaryDto;
 import com.example.backend.entity.Receipt;
 import com.example.backend.ocr.GeminiService;
 import com.example.backend.ocr.GoogleOcrClient;
 import com.example.backend.repository.ReceiptRepository;
+import com.example.backend.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -31,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class ReceiptService {
 
   private final ReceiptRepository receiptRepository;
+  private final UserRepository userRepository;
   private final GoogleOcrClient googleOcrClient;
   private final GeminiService geminiService;
   private final AuditLogService auditLogService;
@@ -57,8 +60,6 @@ public class ReceiptService {
                           () -> {
                             try {
                               String savedFileName = saveFileToLocal(file);
-                              //                              if (true) throw new IOException("테스트용
-                              // OCR 연결 실패");
                               JsonNode ocrJson = googleOcrClient.recognize(fileBytes);
                               return parseAndSave(
                                   idempotencyKey,
@@ -78,13 +79,30 @@ public class ReceiptService {
     }
   }
 
+  public Receipt getReceiptSecurely(Long id, Long workspaceId, Long userId, boolean isAdmin) {
+    Receipt receipt =
+        receiptRepository
+            .findByIdAndWorkspaceId(id, workspaceId)
+            .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
+
+    if (!isAdmin && !receipt.getUserId().equals(userId)) {
+      throw new RuntimeException("ACCESS_DENIED");
+    }
+    return receipt;
+  }
+
   @Transactional
-  public Receipt updateStatus(Long id, Long userId, ReceiptStatus status, String reason) {
-    Receipt receipt = getReceiptSecurely(id, userId);
+  public Receipt updateStatus(
+      Long id,
+      Long workspaceId,
+      Long userId,
+      ReceiptStatus status,
+      String reason,
+      boolean isAdmin) {
+    Receipt receipt = getReceiptSecurely(id, workspaceId, userId, isAdmin);
     ReceiptStatus oldStatus = receipt.getStatus();
 
     receipt.updateStatus(status, reason);
-
     auditLogService.logStatusChange(id, userId, oldStatus, status, reason);
 
     return receipt;
@@ -92,31 +110,42 @@ public class ReceiptService {
 
   @Transactional
   public Receipt updateReceipt(
-      Long id, Long userId, Integer totalAmount, String storeName, LocalDateTime tradeAt) {
-    Receipt receipt = getReceiptSecurely(id, userId);
-    ReceiptStatus oldStatus = receipt.getStatus();
+      Long id,
+      Long workspaceId,
+      Long userId,
+      Integer totalAmount,
+      String storeName,
+      LocalDateTime tradeAt,
+      boolean isAdmin) {
 
+    Receipt receipt = getReceiptSecurely(id, workspaceId, userId, isAdmin);
+    ReceiptStatus oldStatus = receipt.getStatus();
     receipt.updateInfo(totalAmount, storeName, tradeAt);
 
     if (oldStatus != receipt.getStatus()) {
-      auditLogService.logStatusChange(
-          id, userId, oldStatus, receipt.getStatus(), "정보 수정으로 인한 상태 변경");
+      auditLogService.logStatusChange(id, userId, oldStatus, receipt.getStatus(), "정보 수정 및 승인 처리");
     }
 
     return receipt;
   }
 
-  public List<Receipt> getReceipts(Long userId, boolean isAdmin) {
-    if (isAdmin) {
-      return receiptRepository.findAll();
-    }
-    return receiptRepository.findAllByUserId(userId);
-  }
+  @Transactional(readOnly = true)
+  public List<Object> getWorkspaceReceipts(Long workspaceId, Long currentUserId, boolean isAdmin) {
+    List<Receipt> receipts = receiptRepository.findAllByWorkspaceId(workspaceId);
 
-  public Receipt getReceiptSecurely(Long id, Long userId) {
-    return receiptRepository
-        .findByIdAndUserId(id, userId)
-        .orElseThrow(() -> new RuntimeException("RECEIPT_NOT_FOUND"));
+    return receipts.stream()
+        .map(
+            r -> {
+              if (isAdmin || r.getUserId().equals(currentUserId)) {
+                return r;
+              }
+              String ownerName =
+                  userRepository.findById(r.getUserId()).map(u -> u.getName()).orElse("알 수 없음");
+
+              return new ReceiptSummaryDto(
+                  r.getId(), r.getStoreName(), 0, r.getTradeAt(), r.getStatus(), ownerName);
+            })
+        .collect(Collectors.toList());
   }
 
   private Receipt parseAndSave(
@@ -136,12 +165,6 @@ public class ReceiptService {
     int totalAmount = aiResult.path("totalAmount").asInt(0);
     String tradeAtStr = aiResult.path("tradeAt").asText();
 
-    log.info(
-        "AI 파싱 결과 - storeName: {}, totalAmount: {}, tradeAtStr: {}",
-        storeName,
-        totalAmount,
-        tradeAtStr);
-
     ReceiptStatus finalStatus =
         (aiResult.has("storeName") && !storeName.equals("알 수 없는 상호"))
             ? ReceiptStatus.WAITING
@@ -156,9 +179,7 @@ public class ReceiptService {
 
     boolean isNightTime = (tradeAt.getHour() >= 23 || tradeAt.getHour() < 6);
 
-    log.info("야간 여부 계산 - tradeAt hour: {}, isNightTime: {}", tradeAt.getHour(), isNightTime);
-
-    Receipt receipt =
+    return receiptRepository.save(
         Receipt.builder()
             .idempotencyKey(key)
             .fileHash(fileHash)
@@ -171,28 +192,20 @@ public class ReceiptService {
             .nightTime(isNightTime)
             .rawText(fullText)
             .filePath(filePath)
-            .build();
-
-    return receiptRepository.save(receipt);
+            .build());
   }
 
   private String saveFileToLocal(MultipartFile file) {
     try {
       File dir = new File(uploadDir);
-      if (!dir.exists() && !dir.mkdirs()) {
-        throw new IOException("디렉토리 생성 실패");
-      }
-
+      if (!dir.exists() && !dir.mkdirs()) throw new IOException("디렉토리 생성 실패");
       String originalFilename = file.getOriginalFilename();
       String extension =
           (originalFilename != null && originalFilename.contains("."))
               ? originalFilename.substring(originalFilename.lastIndexOf("."))
               : "";
-
       String savedFileName = UUID.randomUUID() + extension;
-      Path targetPath = Paths.get(uploadDir).resolve(savedFileName);
-      Files.copy(file.getInputStream(), targetPath);
-
+      Files.copy(file.getInputStream(), Paths.get(uploadDir).resolve(savedFileName));
       return savedFileName;
     } catch (IOException e) {
       throw new RuntimeException("FILE_SAVE_FAILED");
@@ -202,13 +215,8 @@ public class ReceiptService {
   private void validateFile(MultipartFile file) {
     try {
       byte[] header = new byte[8];
-      if (file.getInputStream().read(header) < 4) {
-        throw new RuntimeException("FILE_TOO_SMALL");
-      }
-
-      if (isJpeg(header) || isPng(header)) {
-        return;
-      }
+      if (file.getInputStream().read(header) < 4) throw new RuntimeException("FILE_TOO_SMALL");
+      if (isJpeg(header) || isPng(header)) return;
       throw new RuntimeException("INVALID_FILE_SIGNATURE");
     } catch (IOException e) {
       throw new RuntimeException("FILE_READ_ERROR");
@@ -228,8 +236,7 @@ public class ReceiptService {
 
   public byte[] generateCsv(List<Receipt> receipts) {
     StringBuilder csv = new StringBuilder();
-    csv.append('\ufeff');
-    csv.append("번호,상호명,날짜,금액\n");
+    csv.append('\ufeff').append("번호,상호명,날짜,금액\n");
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     for (Receipt r : receipts) {
       csv.append(r.getId())
@@ -261,16 +268,12 @@ public class ReceiptService {
 
   private Receipt saveFailedReceipt(
       String key, String hash, Long workspaceId, Long userId, String path, Exception e) {
-    com.example.backend.domain.receipt.SystemErrorCode errorCode =
-        com.example.backend.domain.receipt.SystemErrorCode.UNKNOWN_ERROR;
+    SystemErrorCode errorCode = SystemErrorCode.UNKNOWN_ERROR;
+    if (e instanceof IOException) errorCode = SystemErrorCode.OCR_CONNECTION_FAILURE;
+    else if (e.getMessage() != null && e.getMessage().contains("parse"))
+      errorCode = SystemErrorCode.AI_PARSING_ERROR;
 
-    if (e instanceof IOException) {
-      errorCode = com.example.backend.domain.receipt.SystemErrorCode.OCR_CONNECTION_FAILURE;
-    } else if (e.getMessage() != null && e.getMessage().contains("parse")) {
-      errorCode = com.example.backend.domain.receipt.SystemErrorCode.AI_PARSING_ERROR;
-    }
-
-    Receipt receipt =
+    return receiptRepository.save(
         Receipt.builder()
             .idempotencyKey(key)
             .fileHash(hash)
@@ -279,8 +282,10 @@ public class ReceiptService {
             .status(ReceiptStatus.FAILED_SYSTEM)
             .systemErrorCode(errorCode)
             .filePath(path)
-            .build();
+            .build());
+  }
 
-    return receiptRepository.save(receipt);
+  public java.util.Map<String, Object> getAdminStats(Long workspaceId) {
+    return receiptRepository.getWorkspaceStats(workspaceId);
   }
 }
