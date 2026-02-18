@@ -55,6 +55,19 @@ public class Receipt {
 
   private String rejectionReason;
 
+  @ElementCollection(fetch = FetchType.LAZY)
+  @CollectionTable(name = "receipt_tags", joinColumns = @JoinColumn(name = "receipt_id"))
+  @Column(name = "tag_name")
+  @Builder.Default
+  private java.util.List<String> tags = new java.util.ArrayList<>();
+
+  public void updateTags(java.util.List<String> newTags) {
+    this.tags.clear();
+    if (newTags != null) {
+      this.tags.addAll(newTags);
+    }
+  }
+
   private LocalDateTime createdAt;
 
   @PrePersist
@@ -98,5 +111,13 @@ public class Receipt {
     }
     this.status = ReceiptStatus.APPROVED;
     this.systemErrorCode = null;
+  }
+
+  public void resubmit() {
+    if (this.status != ReceiptStatus.REJECTED) {
+      throw new IllegalStateException("반려된 상태의 영수증만 재제출이 가능합니다.");
+    }
+    this.status = ReceiptStatus.WAITING;
+    this.rejectionReason = null;
   }
 }

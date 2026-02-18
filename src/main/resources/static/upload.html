@@ -93,9 +93,7 @@
         .form-group input { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; font-size: 0.95rem; }
         .form-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
 
-        /* 비공개 마스킹 배지 스타일 */
         .mask-badge { background:#f1f5f9; color:#94a3b8; padding:4px 8px; border-radius:6px; font-size:0.8rem; font-weight:500; }
-        /* 관리자 모드 시 강조 색상 변경 */
         body.admin-mode { --primary: #0f172a; }
         .admin-header { width: 100%; max-width: 1200px; margin-bottom: 20px; display: none; padding: 15px 25px; background: #0f172a; color: white; border-radius: 16px; justify-content: space-between; align-items: center; }
     </style>
@@ -186,7 +184,6 @@
     const userId = localStorage.getItem('currentUserId');
     const userRole = localStorage.getItem('userRole');
 
-    // ✅ 1. 전역 스코프에 함수를 명시적으로 할당 (콘솔에서도 읽을 수 있게)
     window.checkIsAdmin = function() {
         const role = localStorage.getItem('userRole');
         return role === 'ADMIN';
@@ -206,7 +203,6 @@
     async function fetchReceipts() {
         if (!token || !workspaceId || !userId) return;
 
-        // 현재 관리자인지 미리 확정
         const isReallyAdmin = window.checkIsAdmin();
 
         try {
@@ -233,13 +229,20 @@
             const html = receiptData.map(r => {
                 const isFinal = (r.status === 'APPROVED' || r.status === 'REJECTED');
 
-                // ✅ 2. 여기서 isReallyAdmin 변수를 바로 사용
                 const canEdit = !isFinal && (isReallyAdmin || r.userId == userId);
                 const canProcess = !isFinal && isReallyAdmin;
+
+                // ✅ 관리자(isReallyAdmin)라면 본인 것이 아니어도 재제출 버튼이 보이게 수정
+                const canResubmit = r.status === 'REJECTED' && (isReallyAdmin || r.userId == userId);
 
                 const tradeAt = r.tradeAt ? r.tradeAt.replace('T', ' ').substring(0, 16) : '-';
                 const nightBadge = r.nightTime ? '<span style="background:#1e293b; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.65rem; margin-left:4px;">🌙 야간</span>' : '';
                 const reasonAttr = (r.status === 'REJECTED' && r.rejectionReason) ? `data-reason="${escapeHtml(r.rejectionReason)}"` : '';
+
+                // ✅ 백엔드에서 전달된 tags 배열을 배지 형태로 렌더링
+                const tagHtml = (r.tags || []).map(tag =>
+                    `<span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-size:0.65rem; margin-left:4px; border:1px solid #e2e8f0;">${escapeHtml(tag)}</span>`
+                ).join('');
 
                 const amountDisplay = (r.totalAmount === 0 && !isReallyAdmin && r.userId != userId)
                     ? `<span class="mask-badge">🔐 비공개</span>`
@@ -250,12 +253,16 @@
                     <td style="text-align:left"><strong>${escapeHtml(r.storeName)}</strong></td>
                     <td>${escapeHtml(tradeAt)}</td>
                     <td>${amountDisplay}</td>
-                    <td><span class="status-badge ${r.status}" ${reasonAttr}>${r.status}</span>${nightBadge}</td>
+                    <td>
+                        <span class="status-badge ${r.status}" ${reasonAttr}>${r.status}</span>${nightBadge}
+                        ${tagHtml ? `<div style="margin-top:4px;">${tagHtml}</div>` : ''}
+                    </td>
                     <td>
                       <button class="action-btn" ${canEdit ? '' : 'disabled'} data-action="edit" data-id="${r.id}">✏️ 수정</button>
                       <button class="action-btn" data-action="history" data-id="${r.id}">📜 이력</button>
                       <button class="action-btn" ${canProcess ? '' : 'disabled'} data-action="approve" data-id="${r.id}" style="color:#16a34a;">승인</button>
                       <button class="action-btn" ${canProcess ? '' : 'disabled'} data-action="reject" data-id="${r.id}" style="color:#dc2626;">반려</button>
+                      <button class="action-btn" ${canResubmit ? '' : 'disabled'} data-action="resubmit" data-id="${r.id}" style="color:var(--primary);">🔄 재제출</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -362,6 +369,21 @@
         } catch (e) { alert('조회 실패'); }
     }
 
+    // ✅ 재제출 함수
+    async function handleResubmit(id) {
+        if (!confirm("반려된 영수증을 다시 제출하시겠습니까?")) return;
+        try {
+            const res = await fetch(`/api/receipts/${id}/resubmit?workspaceId=${workspaceId}&userId=${userId}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                alert("성공적으로 재제출되었습니다.");
+                fetchReceipts();
+            }
+        } catch (e) { alert("재제출 실패: " + e.message); }
+    }
+
     el('receiptList').addEventListener('click', (e) => {
         const btn = e.target.closest('button');
         if (!btn || btn.disabled) return;
@@ -370,6 +392,8 @@
         if (action === 'history') showHistory(id);
         if (action === 'approve') updateStatus(id, 'APPROVED');
         if (action === 'reject') updateStatus(id, 'REJECTED');
+        // ✅ 재제출 액션 추가
+        if (action === 'resubmit') handleResubmit(id);
     });
 
     function openEditModalById(id) {

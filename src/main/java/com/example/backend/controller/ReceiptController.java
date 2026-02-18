@@ -164,4 +164,12 @@ public class ReceiptController {
   public ResponseEntity<java.util.Map<String, Object>> getStats(@RequestParam Long workspaceId) {
     return ResponseEntity.ok(receiptService.getAdminStats(workspaceId));
   }
+
+  @PostMapping("/{id}/resubmit")
+  public ResponseEntity<Receipt> resubmit(
+      @PathVariable Long id, @RequestParam Long workspaceId, @RequestParam Long userId) {
+
+    log.info("영수증 재제출 요청 - receiptId: {}, userId: {}", id, userId);
+    return ResponseEntity.ok(receiptService.resubmitReceipt(id, workspaceId, userId));
+  }
 }

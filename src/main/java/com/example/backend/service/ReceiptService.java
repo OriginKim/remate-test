@@ -37,6 +37,7 @@ public class ReceiptService {
   private final GoogleOcrClient googleOcrClient;
   private final GeminiService geminiService;
   private final AuditLogService auditLogService;
+  private final TagService tagService;
 
   private final String uploadDir =
       System.getProperty("user.home") + File.separator + "remate_uploads" + File.separator;
@@ -120,11 +121,29 @@ public class ReceiptService {
 
     Receipt receipt = getReceiptSecurely(id, workspaceId, userId, isAdmin);
     ReceiptStatus oldStatus = receipt.getStatus();
+
     receipt.updateInfo(totalAmount, storeName, tradeAt);
+
+    List<String> updatedTags = tagService.deriveTags(receipt);
+    receipt.updateTags(updatedTags);
 
     if (oldStatus != receipt.getStatus()) {
       auditLogService.logStatusChange(id, userId, oldStatus, receipt.getStatus(), "정보 수정 및 승인 처리");
     }
+
+    return receipt;
+  }
+
+  @Transactional
+  public Receipt resubmitReceipt(Long id, Long workspaceId, Long userId) {
+
+    Receipt receipt = getReceiptSecurely(id, workspaceId, userId, false);
+
+    ReceiptStatus oldStatus = receipt.getStatus();
+
+    receipt.resubmit();
+
+    auditLogService.logStatusChange(id, userId, oldStatus, receipt.getStatus(), "사용자 재제출");
 
     return receipt;
   }
@@ -136,14 +155,22 @@ public class ReceiptService {
     return receipts.stream()
         .map(
             r -> {
-              if (isAdmin || r.getUserId().equals(currentUserId)) {
-                return r;
-              }
               String ownerName =
                   userRepository.findById(r.getUserId()).map(u -> u.getName()).orElse("알 수 없음");
 
+              if (isAdmin || r.getUserId().equals(currentUserId)) {
+                return new ReceiptSummaryDto(
+                    r.getId(),
+                    r.getStoreName(),
+                    r.getTotalAmount(),
+                    r.getTradeAt(),
+                    r.getStatus(),
+                    ownerName,
+                    r.getTags());
+              }
+
               return new ReceiptSummaryDto(
-                  r.getId(), r.getStoreName(), 0, r.getTradeAt(), r.getStatus(), ownerName);
+                  r.getId(), r.getStoreName(), 0, r.getTradeAt(), r.getStatus(), ownerName, null);
             })
         .collect(Collectors.toList());
   }
@@ -177,7 +204,9 @@ public class ReceiptService {
       tradeAt = LocalDateTime.now();
     }
 
-    boolean isNightTime = (tradeAt.getHour() >= 23 || tradeAt.getHour() < 6);
+    // TagService를 이용해 태그 리스트 생성
+    Receipt tempReceiptForTagging = Receipt.builder().tradeAt(tradeAt).build();
+    List<String> derivedTags = tagService.deriveTags(tempReceiptForTagging);
 
     return receiptRepository.save(
         Receipt.builder()
@@ -189,7 +218,8 @@ public class ReceiptService {
             .storeName(storeName)
             .totalAmount(totalAmount)
             .tradeAt(tradeAt)
-            .nightTime(isNightTime)
+            .nightTime(derivedTags.contains("🌙 야간"))
+            .tags(derivedTags)
             .rawText(fullText)
             .filePath(filePath)
             .build());
