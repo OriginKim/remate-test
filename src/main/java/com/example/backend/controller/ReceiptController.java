@@ -1,6 +1,7 @@
 package com.example.backend.controller;
 
 import com.example.backend.domain.receipt.ReceiptStatus;
+import com.example.backend.dto.ReceiptSummaryDto;
 import com.example.backend.entity.AuditLog;
 import com.example.backend.entity.Receipt;
 import com.example.backend.service.AuditLogService;
@@ -28,7 +29,7 @@ public class ReceiptController {
   private final AuditLogService auditLogService;
 
   @GetMapping
-  public ResponseEntity<List<Object>> getAllReceipts(
+  public ResponseEntity<List<ReceiptSummaryDto>> getAllReceipts(
       @RequestParam Long workspaceId,
       @RequestParam Long userId,
       @RequestParam(defaultValue = "false") boolean isAdmin) {
@@ -41,11 +42,11 @@ public class ReceiptController {
       @RequestParam Long userId,
       @RequestParam(defaultValue = "false") boolean isAdmin) {
     try {
-      List<Object> objects = receiptService.getWorkspaceReceipts(workspaceId, userId, isAdmin);
-      List<Receipt> receipts =
-          objects.stream().filter(obj -> obj instanceof Receipt).map(obj -> (Receipt) obj).toList();
 
-      byte[] out = receiptService.generateCsv(receipts);
+      List<ReceiptSummaryDto> dtos =
+          receiptService.getWorkspaceReceipts(workspaceId, userId, isAdmin);
+
+      byte[] out = receiptService.generateCsvFromDto(dtos);
 
       return ResponseEntity.ok()
           .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")

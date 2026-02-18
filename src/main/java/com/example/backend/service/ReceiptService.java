@@ -149,7 +149,8 @@ public class ReceiptService {
   }
 
   @Transactional(readOnly = true)
-  public List<Object> getWorkspaceReceipts(Long workspaceId, Long currentUserId, boolean isAdmin) {
+  public List<ReceiptSummaryDto> getWorkspaceReceipts(
+      Long workspaceId, Long currentUserId, boolean isAdmin) {
     List<Receipt> receipts = receiptRepository.findAllByWorkspaceId(workspaceId);
 
     return receipts.stream()
@@ -204,7 +205,6 @@ public class ReceiptService {
       tradeAt = LocalDateTime.now();
     }
 
-    // TagService를 이용해 태그 리스트 생성
     Receipt tempReceiptForTagging = Receipt.builder().tradeAt(tradeAt).build();
     List<String> derivedTags = tagService.deriveTags(tempReceiptForTagging);
 
@@ -247,9 +247,9 @@ public class ReceiptService {
       byte[] header = new byte[8];
       if (file.getInputStream().read(header) < 4) throw new RuntimeException("FILE_TOO_SMALL");
       if (isJpeg(header) || isPng(header)) return;
-      throw new RuntimeException("INVALID_FILE_SIGNATURE");
+      throw new RuntimeException("FILE_TYPE_NOT_ALLOWED");
     } catch (IOException e) {
-      throw new RuntimeException("FILE_READ_ERROR");
+      throw new RuntimeException("FILE_UPLOAD_FAILED");
     }
   }
 
@@ -264,11 +264,11 @@ public class ReceiptService {
         && (h[3] & 0xFF) == 0x47;
   }
 
-  public byte[] generateCsv(List<Receipt> receipts) {
+  public byte[] generateCsvFromDto(List<ReceiptSummaryDto> receipts) {
     StringBuilder csv = new StringBuilder();
     csv.append('\ufeff').append("번호,상호명,날짜,금액\n");
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    for (Receipt r : receipts) {
+    for (ReceiptSummaryDto r : receipts) {
       csv.append(r.getId())
           .append(",")
           .append(r.getStoreName())
@@ -287,6 +287,7 @@ public class ReceiptService {
         .map(
             file -> {
               try {
+
                 return uploadAndProcess("multi-" + UUID.randomUUID(), file, workspaceId, userId);
               } catch (Exception e) {
                 return null;
