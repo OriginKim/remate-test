@@ -101,12 +101,17 @@ public class Receipt {
     this.systemErrorCode = errorCode;
   }
 
-  public void updateStatus(ReceiptStatus status, String reason) {
-    if (this.status == ReceiptStatus.APPROVED && status != ReceiptStatus.APPROVED) {
-      throw new IllegalStateException("이미 승인된 영수증의 상태를 변경할 수 없습니다.");
-    }
+  public void updateStatus(ReceiptStatus status, String reason, Long actorUserId) {
     if (!this.status.canTransitionTo(status)) {
       throw new IllegalStateException("INVALID_STATE_TRANSITION");
+    }
+
+    if (status == ReceiptStatus.APPROVED && this.userId.equals(actorUserId)) {
+      throw new IllegalStateException("SELF_APPROVAL_NOT_ALLOWED");
+    }
+
+    if (status == ReceiptStatus.REJECTED && (reason == null || reason.isBlank())) {
+      throw new IllegalStateException("REJECT_REASON_REQUIRED");
     }
 
     this.status = status;
@@ -133,14 +138,17 @@ public class Receipt {
     this.systemErrorCode = null;
   }
 
-  public void updateSystemError(SystemErrorCode errorCode) {
-    this.status = ReceiptStatus.FAILED_SYSTEM;
-    this.systemErrorCode = errorCode;
-  }
-
   public void resubmit() {
 
-    updateStatus(ReceiptStatus.WAITING, null);
+    if (this.status != ReceiptStatus.REJECTED) {
+      throw new IllegalStateException("반려된 영수증만 재제출이 가능합니다.");
+    }
+
+    if (!this.status.canTransitionTo(ReceiptStatus.WAITING)) {
+      throw new IllegalStateException("INVALID_STATE_TRANSITION");
+    }
+
+    this.status = ReceiptStatus.WAITING;
     this.rejectionReason = null;
   }
 }

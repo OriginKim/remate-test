@@ -167,7 +167,7 @@ public class ReceiptService {
     Receipt receipt = getReceiptSecurely(id, workspaceId, userId, isAdmin);
     ReceiptStatus oldStatus = receipt.getStatus();
 
-    receipt.updateStatus(status, reason);
+    receipt.updateStatus(status, reason, userId);
     auditLogService.logStatusChange(id, userId, oldStatus, status, reason);
 
     return receipt;
@@ -240,55 +240,6 @@ public class ReceiptService {
         .collect(Collectors.toList());
   }
 
-  private Receipt parseAndSave(
-      String key,
-      String fileHash,
-      JsonNode ocrJson,
-      Long workspaceId,
-      Long userId,
-      String filePath) {
-    JsonNode textAnnotations = ocrJson.path("responses").get(0).path("textAnnotations");
-    String fullText =
-        textAnnotations.isMissingNode() ? "" : textAnnotations.get(0).path("description").asText();
-
-    JsonNode aiResult = geminiService.getParsedReceipt(fullText);
-
-    String storeName = aiResult.path("storeName").asText("알 수 없는 상호");
-    int totalAmount = aiResult.path("totalAmount").asInt(0);
-    String tradeAtStr = aiResult.path("tradeAt").asText();
-
-    ReceiptStatus finalStatus =
-        (aiResult.has("storeName") && !storeName.equals("알 수 없는 상호"))
-            ? ReceiptStatus.WAITING
-            : ReceiptStatus.NEED_MANUAL;
-
-    LocalDateTime tradeAt;
-    try {
-      tradeAt = LocalDateTime.parse(tradeAtStr, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-    } catch (Exception e) {
-      tradeAt = LocalDateTime.now();
-    }
-
-    Receipt tempReceiptForTagging = Receipt.builder().tradeAt(tradeAt).build();
-    List<String> derivedTags = tagService.deriveTags(tempReceiptForTagging);
-
-    return receiptRepository.save(
-        Receipt.builder()
-            .idempotencyKey(key)
-            .fileHash(fileHash)
-            .workspaceId(workspaceId)
-            .userId(userId)
-            .status(finalStatus)
-            .storeName(storeName)
-            .totalAmount(totalAmount)
-            .tradeAt(tradeAt)
-            .nightTime(derivedTags.contains("🌙 야간"))
-            .tags(derivedTags)
-            .rawText(fullText)
-            .filePath(filePath)
-            .build());
-  }
-
   private String saveFileToLocal(MultipartFile file) {
     try {
       File dir = new File(uploadDir);
@@ -307,6 +258,12 @@ public class ReceiptService {
   }
 
   private void validateFile(MultipartFile file) {
+    String contentType = file.getContentType();
+    if (contentType == null
+        || !(contentType.equals("image/jpeg") || contentType.equals("image/png"))) {
+      throw new RuntimeException("FILE_TYPE_NOT_ALLOWED");
+    }
+
     try {
       byte[] header = new byte[8];
       if (file.getInputStream().read(header) < 4) throw new RuntimeException("FILE_TOO_SMALL");
