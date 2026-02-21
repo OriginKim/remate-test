@@ -78,20 +78,41 @@ public class Receipt {
     }
   }
 
+  public void updateAfterAnalysis(
+      String storeName,
+      int totalAmount,
+      LocalDateTime tradeAt,
+      String rawText,
+      ReceiptStatus status,
+      java.util.List<String> tags,
+      boolean nightTime) {
+    this.storeName = storeName;
+    this.totalAmount = totalAmount;
+    this.tradeAt = tradeAt;
+    this.rawText = rawText;
+    this.status = status;
+    this.tags.clear();
+    if (tags != null) this.tags.addAll(tags);
+    this.nightTime = nightTime;
+  }
+
+  public void markAsFailed(SystemErrorCode errorCode) {
+    this.status = ReceiptStatus.FAILED_SYSTEM;
+    this.systemErrorCode = errorCode;
+  }
+
   public void updateStatus(ReceiptStatus status, String reason) {
     if (this.status == ReceiptStatus.APPROVED && status != ReceiptStatus.APPROVED) {
       throw new IllegalStateException("이미 승인된 영수증의 상태를 변경할 수 없습니다.");
+    }
+    if (!this.status.canTransitionTo(status)) {
+      throw new IllegalStateException("INVALID_STATE_TRANSITION");
     }
 
     this.status = status;
     if (status == ReceiptStatus.REJECTED) {
       this.rejectionReason = reason;
     }
-  }
-
-  public void updateSystemError(SystemErrorCode errorCode) {
-    this.status = ReceiptStatus.FAILED_SYSTEM;
-    this.systemErrorCode = errorCode;
   }
 
   public void updateInfo(Integer totalAmount, String storeName, LocalDateTime tradeAt) {
@@ -109,15 +130,17 @@ public class Receipt {
       this.tradeAt = tradeAt;
       this.nightTime = (tradeAt.getHour() >= 23 || tradeAt.getHour() < 6);
     }
-    this.status = ReceiptStatus.APPROVED;
     this.systemErrorCode = null;
   }
 
+  public void updateSystemError(SystemErrorCode errorCode) {
+    this.status = ReceiptStatus.FAILED_SYSTEM;
+    this.systemErrorCode = errorCode;
+  }
+
   public void resubmit() {
-    if (this.status != ReceiptStatus.REJECTED) {
-      throw new IllegalStateException("반려된 상태의 영수증만 재제출이 가능합니다.");
-    }
-    this.status = ReceiptStatus.WAITING;
+
+    updateStatus(ReceiptStatus.WAITING, null);
     this.rejectionReason = null;
   }
 }

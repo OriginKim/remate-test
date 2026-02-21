@@ -59,25 +59,89 @@ public class ReceiptService {
                       .findByIdempotencyKey(idempotencyKey)
                       .orElseGet(
                           () -> {
+                            String savedFileName = null;
+                            Receipt receipt = null;
                             try {
-                              String savedFileName = saveFileToLocal(file);
+                              savedFileName = saveFileToLocal(file);
+
+                              receipt =
+                                  receiptRepository.save(
+                                      Receipt.builder()
+                                          .idempotencyKey(idempotencyKey)
+                                          .fileHash(fileHash)
+                                          .workspaceId(workspaceId)
+                                          .userId(userId)
+                                          .status(ReceiptStatus.ANALYZING)
+                                          .filePath(savedFileName)
+                                          .build());
+                              log.info(
+                                  "=== [검증 1] DB 선저장 완료: ID={}, Status={}",
+                                  receipt.getId(),
+                                  receipt.getStatus());
+
                               JsonNode ocrJson = googleOcrClient.recognize(fileBytes);
-                              return parseAndSave(
-                                  idempotencyKey,
-                                  fileHash,
-                                  ocrJson,
-                                  workspaceId,
-                                  userId,
-                                  savedFileName);
+                              log.info("=== [검증 2] OCR 분석 시작 (ID: {})", receipt.getId());
+                              return processOcrResult(receipt, ocrJson);
+
                             } catch (Exception e) {
                               log.error("OCR 분석 에러", e);
+                              if (receipt != null) {
+                                return markAsFailed(receipt, e);
+                              }
                               return saveFailedReceipt(
-                                  idempotencyKey, fileHash, workspaceId, userId, null, e);
+                                  idempotencyKey, fileHash, workspaceId, userId, savedFileName, e);
                             }
                           }));
     } catch (Exception e) {
       throw new RuntimeException("FILE_PROCESSING_FAILED", e);
     }
+  }
+
+  private Receipt processOcrResult(Receipt receipt, JsonNode ocrJson) {
+    JsonNode textAnnotations = ocrJson.path("responses").get(0).path("textAnnotations");
+    String fullText =
+        textAnnotations.isMissingNode() ? "" : textAnnotations.get(0).path("description").asText();
+
+    JsonNode aiResult = geminiService.getParsedReceipt(fullText);
+
+    String storeName = aiResult.path("storeName").asText("알 수 없는 상호");
+    int totalAmount = aiResult.path("totalAmount").asInt(0);
+    String tradeAtStr = aiResult.path("tradeAt").asText();
+
+    ReceiptStatus nextStatus =
+        (aiResult.has("storeName") && !storeName.equals("알 수 없는 상호"))
+            ? ReceiptStatus.WAITING
+            : ReceiptStatus.NEED_MANUAL;
+
+    LocalDateTime tradeAt;
+    try {
+      tradeAt = LocalDateTime.parse(tradeAtStr, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    } catch (Exception e) {
+      tradeAt = LocalDateTime.now();
+    }
+
+    List<String> derivedTags = tagService.deriveTags(Receipt.builder().tradeAt(tradeAt).build());
+
+    receipt.updateAfterAnalysis(
+        storeName,
+        totalAmount,
+        tradeAt,
+        fullText,
+        nextStatus,
+        derivedTags,
+        derivedTags.contains("🌙 야간"));
+
+    return receipt;
+  }
+
+  private Receipt markAsFailed(Receipt receipt, Exception e) {
+    SystemErrorCode errorCode = SystemErrorCode.UNKNOWN_ERROR;
+    if (e instanceof IOException) errorCode = SystemErrorCode.OCR_CONNECTION_FAILURE;
+    else if (e.getMessage() != null && e.getMessage().contains("parse"))
+      errorCode = SystemErrorCode.AI_PARSING_ERROR;
+
+    receipt.markAsFailed(errorCode);
+    return receipt;
   }
 
   public Receipt getReceiptSecurely(Long id, Long workspaceId, Long userId, boolean isAdmin) {
