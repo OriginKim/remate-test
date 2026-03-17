@@ -19,4 +19,5 @@ public class ReceiptSummaryDto {
   private String userName;
   List<String> tags;
   private String rejectionReason;
+  private Long userId;
 }

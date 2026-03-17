@@ -4,6 +4,7 @@ import com.example.backend.audit.AuditLog;
 import com.example.backend.audit.AuditLogService;
 import com.example.backend.domain.receipt.ReceiptStatus;
 import com.example.backend.dto.ReceiptSummaryDto;
+import com.example.backend.dto.UploadReceiptResponse;
 import com.example.backend.entity.Receipt;
 import com.example.backend.global.common.ApiResponse;
 import com.example.backend.service.ReceiptService;
@@ -51,7 +52,7 @@ public class ReceiptController {
   }
 
   @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<ApiResponse<Receipt>> upload(
+  public ResponseEntity<ApiResponse<UploadReceiptResponse>> upload(
       @RequestHeader(value = "X-IDEMPOTENCY-KEY", required = false) String idempotencyKey,
       @RequestPart("file") MultipartFile file,
       @RequestParam("workspaceId") Long workspaceId) {
@@ -64,8 +65,8 @@ public class ReceiptController {
             ? "auto-" + UUID.randomUUID()
             : idempotencyKey;
 
-    Receipt receipt = receiptService.uploadAndProcess(key, file, workspaceId);
-    return ResponseEntity.ok(ApiResponse.ok(receipt));
+    UploadReceiptResponse response = receiptService.uploadAndProcess(key, file, workspaceId);
+    return ResponseEntity.ok(ApiResponse.ok(response));
   }
 
   @PatchMapping("/{id}/status")
@@ -120,7 +121,7 @@ public class ReceiptController {
   }
 
   @PostMapping(value = "/upload/multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<ApiResponse<List<Receipt>>> uploadMultiple(
+  public ResponseEntity<ApiResponse<List<UploadReceiptResponse>>> uploadMultiple(
       @RequestPart("files") List<MultipartFile> files,
       @RequestParam("workspaceId") Long workspaceId) {
     if (files == null || files.isEmpty()) return ResponseEntity.badRequest().build();
