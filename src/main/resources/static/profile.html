@@ -154,7 +154,13 @@
                     headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
+
                 const fileResult = await fileRes.json();
+
+                if (!fileRes.ok) {
+                    alert(fileResult.error?.message || "파일 업로드 실패");
+                    return;
+                }
 
                 if (fileResult.success) {
                     await fetch('/api/v1/users/me/profile-image', {
@@ -190,6 +196,7 @@
             btn.disabled = false;
         }
     }
+
 
     async function updatePassword() {
         const data = {

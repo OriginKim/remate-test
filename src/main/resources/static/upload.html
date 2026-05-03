@@ -165,12 +165,9 @@
         const emailInput = el('inviteEmail');
         const email = emailInput.value.trim();
         const btn = el('btnSendInvite');
-
         if (!email) return alert("이메일을 입력해주세요.");
-
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) return alert("올바른 이메일 형식이 아닙니다.");
-
         btn.disabled = true;
         try {
             const res = await fetch(`/api/v1/workspaces/${workspaceId}/invite`, {
@@ -191,7 +188,13 @@
 
     function initLayout() {
         el('headerUserName').textContent = userName || '-';
-        if (checkIsAdmin()) { el('adminBtns').style.display = 'flex'; el('downloadBtn').style.display = 'inline-block'; }
+        if (checkIsAdmin()) {
+            el('adminBtns').style.display = 'flex';
+            el('downloadBtn').style.display = 'inline-block';
+            el('checkAll').style.display = 'inline-block';
+        } else {
+            el('checkAll').style.display = 'none';
+        }
         loadWorkspaces();
     }
 
@@ -279,19 +282,22 @@
         el('progCont').style.display = 'block'; el('progBar').style.width = '30%'; el('uploadBtn').disabled = true;
         try {
             const res = await fetch(`/api/v1/receipts/upload/multiple?workspaceId=${workspaceId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+            const json = await res.json();
             if (res.ok) {
-                const json = await res.json();
                 const results = json.data || [];
+                if (results.length === 0) {
+                    // 백엔드의 ErrorCode.FILE_TYPE_NOT_ALLOWED.defaultMessage를 띄웁니다.
+                    const serverMsg = json.meta?.message || "허용되지 않은 파일 형식입니다.";
+                    alert(serverMsg);
+                    el('progCont').style.display = 'none';
+                    el('uploadBtn').disabled = false;
+                    return;
+                }
                 const duplicates = results.filter(r => r.duplicate);
                 const newReceipts = results.filter(r => !r.duplicate);
-
-                if (duplicates.length > 0) {
-                    alert("이미 등록된 영수증이 포함되어 있습니다.");
-                }
-
+                if (duplicates.length > 0) alert("이미 등록된 영수증이 포함되어 있습니다.");
                 if (newReceipts.length === 1) {
-                    const receipt = newReceipts[0];
-                    location.href = `/receipt-detail.html?id=${receipt.id}&workspaceId=${workspaceId}&preview=true`;
+                    location.href = `/receipt-detail.html?id=${newReceipts[0].id}&workspaceId=${workspaceId}&preview=true`;
                 } else if (newReceipts.length > 1) {
                     alert(`${newReceipts.length}개 분석 완료! 각 영수증을 확인해주세요.`);
                     closeModal('uploadModal');
@@ -302,8 +308,12 @@
                     fetchReceipts();
                     fetchStats();
                 }
+            } else {
+                // 비정상 응답 시 에러 객체 내부의 메시지를 출력합니다.
+                alert(json.error?.message || json.meta?.message || "업로드 실패");
+                el('progCont').style.display = 'none';
             }
-        } catch (e) { alert("오류"); } finally { el('uploadBtn').disabled = false; }
+        } catch (e) { alert("통신 오류"); } finally { el('uploadBtn').disabled = false; }
     }
 
     async function exportExcel() {
@@ -312,14 +322,8 @@
                 method: 'GET',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.status === 403) {
-                alert("관리자만 다운로드할 수 있습니다.");
-                return;
-            }
-            if (!res.ok) {
-                alert("다운로드 실패");
-                return;
-            }
+            if (res.status === 403) return alert("관리자만 다운로드할 수 있습니다.");
+            if (!res.ok) return alert("다운로드 실패");
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -329,9 +333,7 @@
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-        } catch (e) {
-            alert("다운로드 오류");
-        }
+        } catch (e) { alert("다운로드 오류"); }
     }
 
     function toggleAllCheckbox(master) {
@@ -348,35 +350,22 @@
         } else {
             btn.style.display = 'none';
         }
-        // 전체선택 체크박스 상태 동기화
         const all = document.querySelectorAll('.receipt-checkbox');
         if (el('checkAll')) el('checkAll').checked = all.length > 0 && checked.length === all.length;
     }
 
     async function exportSelectedExcel() {
         const checked = document.querySelectorAll('.receipt-checkbox:checked');
-        if (checked.length === 0) {
-            alert("다운로드할 영수증을 선택해주세요.");
-            return;
-        }
+        if (checked.length === 0) return alert("다운로드할 영수증을 선택해주세요.");
         const receiptIds = Array.from(checked).map(cb => parseInt(cb.value));
         try {
             const res = await fetch(`/api/v1/receipts/export/selected`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ receiptIds, workspaceId: parseInt(workspaceId) })
             });
-            if (res.status === 403) {
-                alert("관리자만 다운로드할 수 있습니다.");
-                return;
-            }
-            if (!res.ok) {
-                alert("다운로드 실패");
-                return;
-            }
+            if (res.status === 403) return alert("관리자만 다운로드할 수 있습니다.");
+            if (!res.ok) return alert("다운로드 실패");
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -386,23 +375,7 @@
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-        } catch (e) {
-            alert("다운로드 오류");
-        }
-    }
-
-    function initLayout() {
-        el('headerUserName').textContent = userName || '-';
-        if (checkIsAdmin()) {
-            el('adminBtns').style.display = 'flex';
-            el('downloadBtn').style.display = 'inline-block';
-            // 관리자만 전체선택 체크박스 표시
-            el('checkAll').style.display = 'inline-block';
-        } else {
-            // 멤버는 체크박스 헤더 숨김
-            el('checkAll').style.display = 'none';
-        }
-        loadWorkspaces();
+        } catch (e) { alert("다운로드 오류"); }
     }
 
     el('dropZone').addEventListener('click', () => el('fileInput').click());
