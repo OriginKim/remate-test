@@ -2,6 +2,7 @@ package com.example.backend.dto;
 
 import com.example.backend.entity.WorkspaceColor;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -10,6 +11,7 @@ import lombok.NoArgsConstructor;
 @Schema(name = "WorkspaceSettingsUpdate", description = "워크스페이스 설정 수정 요청 데이터")
 public class WorkspaceSettingsUpdateDto {
 
+  @NotBlank(message = "워크스페이스 이름은 필수입니다.")
   @Schema(description = "수정할 워크스페이스 이름", example = "경영관리팀 (수정)")
   private String name;
 

@@ -2,6 +2,7 @@ package com.example.backend.dto;
 
 import com.example.backend.entity.WorkspaceColor;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -10,6 +11,7 @@ import lombok.NoArgsConstructor;
 @Schema(name = "CreateWorkspaceRequest", description = "워크스페이스 생성 요청 데이터")
 public class CreateWorkspaceRequestDto {
 
+  @NotBlank(message = "워크스페이스 이름은 필수입니다.")
   @Schema(description = "생성할 워크스페이스 이름", example = "Re:Mate Team")
   private String name;
 
